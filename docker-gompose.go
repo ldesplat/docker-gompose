@@ -9,36 +9,6 @@ import (
 	"github.com/fsouza/go-dockerclient"
 )
 
-var data = `
-web:
-  ports:
-    - "8000:8000"
-elasticsearch:
-  image: elasticsearch:latest
-  ports:
-    - "9200:9200"
-    - "9300:9300"
-neo4j:
-  image: tpires/neo4j
-  ports:
-    - "7474:7474"
-    - "1337:1337"
-  external_links:
-    - bla
-    - bla2
-  env_file: yellow
-redis:
-  image: redis:latest
-  PORTS:
-    - "6379:6379"
-  env_file:
-    - green
-    - red
-    - blue
-nginx:
-  image: nginx:latest
-`
-
 func before(c *cli.Context) error {
 
 	// Parse the yml file
