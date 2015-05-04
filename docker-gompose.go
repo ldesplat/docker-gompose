@@ -6,7 +6,6 @@ import (
 	"os"
 	"path"
 	"strings"
-	"text/tabwriter"
 
 	"github.com/codegangsta/cli"
 	"github.com/fsouza/go-dockerclient"
@@ -34,6 +33,13 @@ func before(c *cli.Context) (Containers, *docker.Client, string, error) {
 		log.Fatal(err)
 	}
 	var projectName = path.Base(workingDir)
+
+	if c.GlobalString("file") != "FILE" {
+		var baseDir = path.Dir(configFile)
+		if baseDir != "." && baseDir != "/" {
+			projectName = strings.ToLower(path.Base(baseDir))
+		}
+	}
 	if c.GlobalString("project-name") != "NAME" {
 		projectName = c.GlobalString("project-name")
 	}
@@ -51,50 +57,6 @@ func before(c *cli.Context) (Containers, *docker.Client, string, error) {
 	}
 
 	return config, client, projectName, err
-}
-
-// CmdPs defines the ps command
-func CmdPs(config Containers, client *docker.Client, projectName string) {
-
-	conts, err := client.ListContainers(docker.ListContainersOptions{All: true})
-	if err != nil {
-		log.Fatalf("%v", err)
-	}
-
-	w := new(tabwriter.Writer)
-	w.Init(os.Stdout, 0, 1, 3, ' ', 0)
-	fmt.Fprintln(w, "Name\tCommand\tState\tPorts")
-	fmt.Fprintln(w, "-----------------\t-----------------\t-----------------\t-----------------")
-	for _, cont := range conts {
-		if stringStartsInSlice("/"+projectName+"_", cont.Names) {
-			//fmt.Printf("%-.18s   %-.18s   %-.18s   ", cont.Names[0][1:len(cont.Names[0])], cont.Command, cont.Status)
-			fmt.Fprintf(w, "%s\t%s\t%-.18s\t", cont.Names[0][1:len(cont.Names[0])], cont.Command, cont.Status)
-			for i, port := range cont.Ports {
-				if i > 0 {
-					fmt.Fprintf(w, "\n\t\t\t")
-				}
-				fmt.Fprintf(w, "%s:%v->%v/%s", port.IP, port.PublicPort, port.PrivatePort, port.Type)
-			}
-
-			fmt.Fprintln(w)
-		}
-	}
-	w.Flush()
-}
-
-// CmdPull defines the pull command
-func CmdPull(config Containers, client *docker.Client) {
-
-	for name, cont := range config {
-		if cont.Image != "" {
-
-			fmt.Printf("Pulling %s (%s)...\n", name, cont.Image)
-			err := client.PullImage(docker.PullImageOptions{Repository: cont.Image}, docker.AuthConfiguration{})
-			if err != nil {
-				log.Fatalf("%v", err)
-			}
-		}
-	}
 }
 
 func main() {
@@ -118,14 +80,16 @@ Commands:
 
 	app.Flags = []cli.Flag{
 		cli.StringFlag{
-			Name:  "file, f",
-			Value: "FILE",
-			Usage: "Specify an alternate compose file (default: docker-compose.yml)",
+			Name:   "file, f",
+			Value:  "FILE",
+			Usage:  "Specify an alternate compose file (default: docker-compose.yml)",
+			EnvVar: "COMPOSE_FILE",
 		},
 		cli.StringFlag{
-			Name:  "project-name, p",
-			Value: "NAME",
-			Usage: "Specify an alternate project name (default: directory name)",
+			Name:   "project-name, p",
+			Value:  "NAME",
+			Usage:  "Specify an alternate project name (default: directory name)",
+			EnvVar: "COMPOSE_PROJECT_NAME",
 		},
 		cli.StringFlag{
 			Name:  "verbose",
@@ -138,35 +102,36 @@ Commands:
 			Name:  "build",
 			Usage: "Build or rebuild services",
 			Action: func(c *cli.Context) {
-				fmt.Println("Build")
+				fmt.Println("Not yet implemented!")
 			},
 		},
 		{
 			Name:  "help",
 			Usage: "Get help on a command",
 			Action: func(c *cli.Context) {
-				fmt.Println("Help")
+				fmt.Println("Not yet implemented!")
 			},
 		},
 		{
 			Name:  "kill",
 			Usage: "Kill containers",
 			Action: func(c *cli.Context) {
-				fmt.Println("Kill")
+				config, client, projectName, _ := before(c)
+				CmdKill(config, client, projectName)
 			},
 		},
 		{
 			Name:  "logs",
 			Usage: "View output from containers",
 			Action: func(c *cli.Context) {
-				fmt.Println("Logs")
+				fmt.Println("Not yet implemented!")
 			},
 		},
 		{
 			Name:  "port",
 			Usage: "Print the public port for a port binding",
 			Action: func(c *cli.Context) {
-				fmt.Println("Port")
+				fmt.Println("Not yet implemented!")
 			},
 		},
 		{
@@ -189,49 +154,50 @@ Commands:
 			Name:  "rm",
 			Usage: "Remove stopped containers",
 			Action: func(c *cli.Context) {
-				fmt.Println("rm")
+				fmt.Println("Not yet implemented!")
 			},
 		},
 		{
 			Name:  "run",
 			Usage: "Run a one-off command",
 			Action: func(c *cli.Context) {
-				fmt.Println("run")
+				fmt.Println("Not yet implemented!")
 			},
 		},
 		{
 			Name:  "scale",
 			Usage: "Set number of containers for a service",
 			Action: func(c *cli.Context) {
-				fmt.Println("scale")
+				fmt.Println("Not yet implemented!")
 			},
 		},
 		{
 			Name:  "start",
 			Usage: "Start services",
 			Action: func(c *cli.Context) {
-				fmt.Println("start")
+				fmt.Println("Not yet implemented!")
 			},
 		},
 		{
 			Name:  "stop",
 			Usage: "Stop services",
 			Action: func(c *cli.Context) {
-				fmt.Println("stop")
+				config, client, projectName, _ := before(c)
+				CmdStop(config, client, projectName)
 			},
 		},
 		{
 			Name:  "restart",
 			Usage: "Restart services",
 			Action: func(c *cli.Context) {
-				fmt.Println("Build")
+				fmt.Println("Not yet implemented!")
 			},
 		},
 		{
 			Name:  "up",
 			Usage: "Create and start containers",
 			Action: func(c *cli.Context) {
-				fmt.Println("up")
+				fmt.Println("Not yet implemented!")
 			},
 		},
 	}
