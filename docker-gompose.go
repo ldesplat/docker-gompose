@@ -4,51 +4,113 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path"
+	"strings"
+	"text/tabwriter"
 
 	"github.com/codegangsta/cli"
 	"github.com/fsouza/go-dockerclient"
 )
 
-func before(c *cli.Context) error {
+func stringStartsInSlice(a string, list []string) bool {
 
-	// Parse the yml file
-	config, err := ParseConfig("./docker-compose.yml")
-	if err != nil {
-		log.Fatal(err)
-		return err
+	for _, b := range list {
+		if strings.HasPrefix(b, a) {
+			return true
+		}
+	}
+	return false
+}
+
+func before(c *cli.Context) (Containers, *docker.Client, string, error) {
+
+	var configFile = "docker-compose.yml"
+	if c.GlobalString("file") != "FILE" {
+		configFile = c.GlobalString("file")
 	}
 
-	fmt.Printf("--- t:\n%v\n\n", config)
+	var workingDir, err = os.Getwd()
+	if err != nil {
+		log.Fatal(err)
+	}
+	var projectName = path.Base(workingDir)
+	if c.GlobalString("project-name") != "NAME" {
+		projectName = c.GlobalString("project-name")
+	}
 
-	for index, element := range config {
-		fmt.Printf("------ %v ------\n", index)
-		fmt.Printf("Image: %v\n", element.Image)
-		fmt.Printf("Ports: %v\n", element.Ports)
-		fmt.Printf("Volume: %v\n", element.Volumes)
-		fmt.Printf("Links: %v\n", element.Links)
+	// Parse the yml file
+	config, err := ParseConfig(configFile)
+	if err != nil {
+		log.Fatal(err)
 	}
 
 	// Now we connect to the docker daemon
 	client, err := ConnectToDocker()
 	if err != nil {
 		log.Fatal(err)
-		return err
 	}
 
-	images, err := client.ListImages(docker.ListImagesOptions{All: true})
+	return config, client, projectName, err
+}
 
+// CmdPs defines the ps command
+func CmdPs(config Containers, client *docker.Client, projectName string) {
+
+	conts, err := client.ListContainers(docker.ListContainersOptions{All: true})
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalf("%v", err)
 	}
 
-	for _, c := range images {
-		log.Println(c.ID, c.Created)
-	}
+	w := new(tabwriter.Writer)
+	w.Init(os.Stdout, 0, 1, 3, ' ', 0)
+	fmt.Fprintln(w, "Name\tCommand\tState\tPorts")
+	fmt.Fprintln(w, "-----------------\t-----------------\t-----------------\t-----------------")
+	for _, cont := range conts {
+		if stringStartsInSlice("/"+projectName+"_", cont.Names) {
+			//fmt.Printf("%-.18s   %-.18s   %-.18s   ", cont.Names[0][1:len(cont.Names[0])], cont.Command, cont.Status)
+			fmt.Fprintf(w, "%s\t%s\t%-.18s\t", cont.Names[0][1:len(cont.Names[0])], cont.Command, cont.Status)
+			for i, port := range cont.Ports {
+				if i > 0 {
+					fmt.Fprintf(w, "\n\t\t\t")
+				}
+				fmt.Fprintf(w, "%s:%v->%v/%s", port.IP, port.PublicPort, port.PrivatePort, port.Type)
+			}
 
-	return err
+			fmt.Fprintln(w)
+		}
+	}
+	w.Flush()
+}
+
+// CmdPull defines the pull command
+func CmdPull(config Containers, client *docker.Client) {
+
+	for name, cont := range config {
+		if cont.Image != "" {
+
+			fmt.Printf("Pulling %s (%s)...\n", name, cont.Image)
+			err := client.PullImage(docker.PullImageOptions{Repository: cont.Image}, docker.AuthConfiguration{})
+			if err != nil {
+				log.Fatalf("%v", err)
+			}
+		}
+	}
 }
 
 func main() {
+	cli.AppHelpTemplate = `{{.Usage}}
+
+Usage:
+  docker-gompose [options] [COMMAND] [ARGS...]
+
+Options:
+  {{range .Flags}}{{.}}
+  {{end}}
+
+Commands:
+  {{range .Commands}}{{join .Names ", "}}{{ "\t" }}{{.Usage}}
+  {{end}}
+`
 	app := cli.NewApp()
 	app.Name = "docker-gompose"
 	app.Usage = "Fast, isolated development environments using Docker."
@@ -73,9 +135,8 @@ func main() {
 
 	app.Commands = []cli.Command{
 		{
-			Name:   "build",
-			Usage:  "Builds or rebuilds services",
-			Before: before,
+			Name:  "build",
+			Usage: "Build or rebuild services",
 			Action: func(c *cli.Context) {
 				fmt.Println("Build")
 			},
@@ -112,14 +173,16 @@ func main() {
 			Name:  "ps",
 			Usage: "List containers",
 			Action: func(c *cli.Context) {
-				fmt.Println("ps")
+				config, client, projectName, _ := before(c)
+				CmdPs(config, client, projectName)
 			},
 		},
 		{
 			Name:  "pull",
 			Usage: "Pulls service images",
 			Action: func(c *cli.Context) {
-				fmt.Println("Pull")
+				config, client, _, _ := before(c)
+				CmdPull(config, client)
 			},
 		},
 		{
