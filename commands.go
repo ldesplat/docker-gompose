@@ -4,10 +4,49 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strings"
 	"text/tabwriter"
 
 	"github.com/fsouza/go-dockerclient"
 )
+
+var signalMap = map[string]docker.Signal{
+	"SIGABRT":   docker.SIGABRT,
+	"SIGALRM":   docker.SIGALRM,
+	"SIGBUS":    docker.SIGBUS,
+	"SIGCHLD":   docker.SIGCHLD,
+	"SIGCLD":    docker.SIGCLD,
+	"SIGCONT":   docker.SIGCONT,
+	"SIGFPE":    docker.SIGFPE,
+	"SIGHUP":    docker.SIGHUP,
+	"SIGILL":    docker.SIGILL,
+	"SIGINT":    docker.SIGINT,
+	"SIGIO":     docker.SIGIO,
+	"SIGIOT":    docker.SIGIOT,
+	"SIGKILL":   docker.SIGKILL,
+	"SIGPIPE":   docker.SIGPIPE,
+	"SIGPOLL":   docker.SIGPOLL,
+	"SIGPROF":   docker.SIGPROF,
+	"SIGPWR":    docker.SIGPWR,
+	"SIGQUIT":   docker.SIGQUIT,
+	"SIGSEGV":   docker.SIGSEGV,
+	"SIGSTKFLT": docker.SIGSTKFLT,
+	"SIGSTOP":   docker.SIGSTOP,
+	"SIGSYS":    docker.SIGSYS,
+	"SIGTERM":   docker.SIGTERM,
+	"SIGTRAP":   docker.SIGTRAP,
+	"SIGTSTP":   docker.SIGTSTP,
+	"SIGTTIN":   docker.SIGTTIN,
+	"SIGTTOU":   docker.SIGTTOU,
+	"SIGUNUSED": docker.SIGUNUSED,
+	"SIGURG":    docker.SIGURG,
+	"SIGUSR1":   docker.SIGUSR1,
+	"SIGUSR2":   docker.SIGUSR2,
+	"SIGVTALRM": docker.SIGVTALRM,
+	"SIGWINCH":  docker.SIGWINCH,
+	"SIGXCPU":   docker.SIGXCPU,
+	"SIGXFSZ":   docker.SIGXFSZ,
+}
 
 // CmdPs defines the ps command
 func CmdPs(config Containers, client *docker.Client, projectName string, onlyIds bool) {
@@ -78,8 +117,12 @@ func CmdStop(config Containers, client *docker.Client, projectName string) {
 }
 
 // CmdKill defines the kill command
-func CmdKill(config Containers, client *docker.Client, projectName string) {
+func CmdKill(config Containers, client *docker.Client, projectName string, signal string) {
 
+	var signalCode = signalMap["SIGKILL"]
+	if signal != "SIGNAL" {
+		signalCode = signalMap[strings.ToUpper(signal)]
+	}
 	conts, err := client.ListContainers(docker.ListContainersOptions{})
 	if err != nil {
 		log.Fatalf("%v", err)
@@ -88,7 +131,7 @@ func CmdKill(config Containers, client *docker.Client, projectName string) {
 	for _, container := range conts {
 		if stringStartsInSlice("/"+projectName+"_", container.Names) {
 			fmt.Printf("Killing %s...\n", container.Names[0])
-			client.KillContainer(docker.KillContainerOptions{ID: container.ID})
+			client.KillContainer(docker.KillContainerOptions{ID: container.ID, Signal: signalCode})
 		}
 	}
 }

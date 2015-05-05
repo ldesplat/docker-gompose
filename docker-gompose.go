@@ -106,18 +106,18 @@ Commands:
 			},
 		},
 		{
-			Name:  "help",
-			Usage: "Get help on a command",
-			Action: func(c *cli.Context) {
-				fmt.Println("Not yet implemented!")
-			},
-		},
-		{
 			Name:  "kill",
 			Usage: "Kill containers",
+			Flags: []cli.Flag{
+				cli.StringFlag{
+					Name:  "s",
+					Value: "SIGNAL",
+					Usage: "SIGNAL to send to the container. Default signal is SIGKILL.",
+				},
+			},
 			Action: func(c *cli.Context) {
 				config, client, projectName, _ := before(c)
-				CmdKill(config, client, projectName)
+				CmdKill(config, client, projectName, c.String("s"))
 			},
 		},
 		{
