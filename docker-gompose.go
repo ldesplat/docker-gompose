@@ -137,9 +137,15 @@ Commands:
 		{
 			Name:  "ps",
 			Usage: "List containers",
+			Flags: []cli.Flag{
+				cli.BoolFlag{
+					Name:  "q",
+					Usage: "Only display IDs",
+				},
+			},
 			Action: func(c *cli.Context) {
 				config, client, projectName, _ := before(c)
-				CmdPs(config, client, projectName)
+				CmdPs(config, client, projectName, c.Bool("q"))
 			},
 		},
 		{

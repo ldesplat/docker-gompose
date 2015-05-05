@@ -10,7 +10,7 @@ import (
 )
 
 // CmdPs defines the ps command
-func CmdPs(config Containers, client *docker.Client, projectName string) {
+func CmdPs(config Containers, client *docker.Client, projectName string, onlyIds bool) {
 
 	conts, err := client.ListContainers(docker.ListContainersOptions{All: true})
 	if err != nil {
@@ -18,24 +18,32 @@ func CmdPs(config Containers, client *docker.Client, projectName string) {
 	}
 
 	w := new(tabwriter.Writer)
-	w.Init(os.Stdout, 0, 1, 3, ' ', 0)
-	fmt.Fprintln(w, "Name\tCommand\tState\tPorts")
-	fmt.Fprintln(w, "-----------------\t-----------------\t-----------------\t-----------------")
+	if !onlyIds {
+		w.Init(os.Stdout, 0, 1, 3, ' ', 0)
+		fmt.Fprintln(w, "Name\tCommand\tState\tPorts")
+		fmt.Fprintln(w, "-----------------\t-----------------\t-----------------\t-----------------")
+	}
 	for _, cont := range conts {
 		if stringStartsInSlice("/"+projectName+"_", cont.Names) {
-			//fmt.Printf("%-.18s   %-.18s   %-.18s   ", cont.Names[0][1:len(cont.Names[0])], cont.Command, cont.Status)
-			fmt.Fprintf(w, "%s\t%s\t%-.18s\t", cont.Names[0][1:len(cont.Names[0])], cont.Command, cont.Status)
-			for i, port := range cont.Ports {
-				if i > 0 {
-					fmt.Fprintf(w, "\n\t\t\t")
+			if onlyIds {
+				fmt.Println(cont.ID)
+			} else {
+				//fmt.Printf("%-.18s   %-.18s   %-.18s   ", cont.Names[0][1:len(cont.Names[0])], cont.Command, cont.Status)
+				fmt.Fprintf(w, "%s\t%s\t%-.18s\t", cont.Names[0][1:len(cont.Names[0])], cont.Command, cont.Status)
+				for i, port := range cont.Ports {
+					if i > 0 {
+						fmt.Fprintf(w, "\n\t\t\t")
+					}
+					fmt.Fprintf(w, "%s:%v->%v/%s", port.IP, port.PublicPort, port.PrivatePort, port.Type)
 				}
-				fmt.Fprintf(w, "%s:%v->%v/%s", port.IP, port.PublicPort, port.PrivatePort, port.Type)
-			}
 
-			fmt.Fprintln(w)
+				fmt.Fprintln(w)
+			}
 		}
 	}
-	w.Flush()
+	if !onlyIds {
+		w.Flush()
+	}
 }
 
 // CmdPull defines the pull command
