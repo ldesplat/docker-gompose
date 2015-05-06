@@ -124,7 +124,8 @@ Commands:
 			Name:  "logs",
 			Usage: "View output from containers",
 			Action: func(c *cli.Context) {
-				fmt.Println("Not yet implemented!")
+				config, client, projectName, _ := before(c)
+				CmdLogs(config, client, projectName)
 			},
 		},
 		{

@@ -135,3 +135,18 @@ func CmdKill(config Containers, client *docker.Client, projectName string, signa
 		}
 	}
 }
+
+// CmdLogs defines the kill command
+func CmdLogs(config Containers, client *docker.Client, projectName string) {
+
+	conts, err := client.ListContainers(docker.ListContainersOptions{All: true})
+	if err != nil {
+		log.Fatalf("%v", err)
+	}
+
+	for _, container := range conts {
+		if stringStartsInSlice("/"+projectName+"_", container.Names) {
+			client.Logs(docker.LogsOptions{Container: container.ID, OutputStream: os.Stdout, ErrorStream: os.Stderr, Follow: true, Stdout: true, Stderr: true})
+		}
+	}
+}
