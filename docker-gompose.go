@@ -188,7 +188,8 @@ Commands:
 			Name:  "start",
 			Usage: "Start services",
 			Action: func(c *cli.Context) {
-				fmt.Println("Not yet implemented!")
+				config, client, projectName, _ := before(c)
+				CmdStart(config, client, projectName)
 			},
 		},
 		{

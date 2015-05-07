@@ -60,13 +60,32 @@ func serviceNameFromContainer(cName string, pName string) string {
 	return cName[len(pName)+2 : len(cName)]
 }
 
-// CmdPs defines the ps command
-func CmdPs(config Containers, client *docker.Client, projectName string, onlyIds bool) {
+func findConfig(config Containers, name string) Container {
+	return config[name[strings.LastIndex(name, "_"):len(name)]]
+}
 
-	conts, err := client.ListContainers(docker.ListContainersOptions{All: true})
+func getServiceContainers(client *docker.Client, projectName string, allContainers bool) map[string]docker.APIContainers {
+
+	conts, err := client.ListContainers(docker.ListContainersOptions{All: allContainers})
+
 	if err != nil {
 		log.Fatalf("%v", err)
 	}
+
+	containerMap := make(map[string]docker.APIContainers)
+	for _, cont := range conts {
+		if stringStartsInSlice("/"+projectName+"_", cont.Names) {
+			containerMap[serviceNameFromContainer(cont.Names[0], projectName)] = cont
+		}
+	}
+
+	return containerMap
+}
+
+// CmdPs defines the ps command
+func CmdPs(config Containers, client *docker.Client, projectName string, onlyIds bool) {
+
+	conts := getServiceContainers(client, projectName, true)
 
 	w := new(tabwriter.Writer)
 	if !onlyIds {
@@ -75,21 +94,19 @@ func CmdPs(config Containers, client *docker.Client, projectName string, onlyIds
 		fmt.Fprintln(w, "-----------------\t-----------------\t-----------------\t-----------------")
 	}
 	for _, cont := range conts {
-		if stringStartsInSlice("/"+projectName+"_", cont.Names) {
-			if onlyIds {
-				fmt.Println(cont.ID)
-			} else {
-				//fmt.Printf("%-.18s   %-.18s   %-.18s   ", cont.Names[0][1:len(cont.Names[0])], cont.Command, cont.Status)
-				fmt.Fprintf(w, "%s\t%s\t%-.18s\t", cont.Names[0][1:len(cont.Names[0])], cont.Command, cont.Status)
-				for i, port := range cont.Ports {
-					if i > 0 {
-						fmt.Fprintf(w, "\n\t\t\t")
-					}
-					fmt.Fprintf(w, "%s:%v->%v/%s", port.IP, port.PublicPort, port.PrivatePort, port.Type)
+		if onlyIds {
+			fmt.Println(cont.ID)
+		} else {
+			//fmt.Printf("%-.18s   %-.18s   %-.18s   ", cont.Names[0][1:len(cont.Names[0])], cont.Command, cont.Status)
+			fmt.Fprintf(w, "%s\t%s\t%-.18s\t", cont.Names[0][1:len(cont.Names[0])], cont.Command, cont.Status)
+			for i, port := range cont.Ports {
+				if i > 0 {
+					fmt.Fprintf(w, "\n\t\t\t")
 				}
-
-				fmt.Fprintln(w)
+				fmt.Fprintf(w, "%s:%v->%v/%s", port.IP, port.PublicPort, port.PrivatePort, port.Type)
 			}
+
+			fmt.Fprintln(w)
 		}
 	}
 	if !onlyIds {
@@ -115,16 +132,11 @@ func CmdPull(config Containers, client *docker.Client) {
 // CmdStop defines the stop command
 func CmdStop(config Containers, client *docker.Client, projectName string) {
 
-	conts, err := client.ListContainers(docker.ListContainersOptions{})
-	if err != nil {
-		log.Fatalf("%v", err)
-	}
+	conts := getServiceContainers(client, projectName, false)
 
 	for _, container := range conts {
-		if stringStartsInSlice("/"+projectName+"_", container.Names) {
-			fmt.Printf("Stopping %s...\n", container.Names[0])
-			client.StopContainer(container.ID, 30)
-		}
+		fmt.Printf("Stopping %s...\n", container.Names[0])
+		client.StopContainer(container.ID, 30)
 	}
 }
 
@@ -135,67 +147,89 @@ func CmdKill(config Containers, client *docker.Client, projectName string, signa
 	if signal != "SIGNAL" {
 		signalCode = signalMap[strings.ToUpper(signal)]
 	}
-	conts, err := client.ListContainers(docker.ListContainersOptions{})
-	if err != nil {
-		log.Fatalf("%v", err)
-	}
+
+	conts := getServiceContainers(client, projectName, false)
 
 	for _, container := range conts {
-		if stringStartsInSlice("/"+projectName+"_", container.Names) {
-			fmt.Printf("Killing %s...\n", container.Names[0])
-			client.KillContainer(docker.KillContainerOptions{ID: container.ID, Signal: signalCode})
-		}
+		fmt.Printf("Killing %s...\n", container.Names[0])
+		client.KillContainer(docker.KillContainerOptions{ID: container.ID, Signal: signalCode})
 	}
 }
 
 // CmdLogs defines the log command
 func CmdLogs(config Containers, client *docker.Client, projectName string, noColor bool) {
 
-	conts, err := client.ListContainers(docker.ListContainersOptions{All: true})
-	if err != nil {
-		log.Fatalf("%v", err)
-	}
+	conts := getServiceContainers(client, projectName, true)
 
 	var wg sync.WaitGroup
 
-	counter := 0
 	spaceLength := 0
-	for _, container := range conts {
-		if stringStartsInSlice("/"+projectName+"_", container.Names) {
-			counter++
-			var l = len(serviceNameFromContainer(container.Names[0], projectName))
-			if spaceLength < l {
-				spaceLength = l
-			}
+	for serviceName := range conts {
+		l := len(serviceName)
+		if spaceLength < l {
+			spaceLength = l
 		}
 	}
 
-	wg.Add(counter)
+	wg.Add(len(conts))
 	colorCounter := 1
-	for _, container := range conts {
-		if stringStartsInSlice("/"+projectName+"_", container.Names) {
-			r, w := io.Pipe()
-			go client.Logs(docker.LogsOptions{Container: container.ID, OutputStream: w, ErrorStream: w, Follow: true, Stdout: true, Stderr: true})
-			go func(reader io.Reader, name string, color ct.Color) {
-				scanner := bufio.NewScanner(reader)
-				for scanner.Scan() {
-					if !noColor {
-						ct.ChangeColor(color, true, ct.None, false)
-					}
-					fmt.Printf("%-[2]*[1]s | ", name, spaceLength)
-					if !noColor {
-						ct.ResetColor()
-					}
-					fmt.Printf("%s\n", scanner.Text())
+	for serviceName, container := range conts {
+		r, w := io.Pipe()
+		go client.Logs(docker.LogsOptions{Container: container.ID, OutputStream: w, ErrorStream: w, Follow: true, Stdout: true, Stderr: true})
+		go func(reader io.Reader, name string, color ct.Color) {
+			scanner := bufio.NewScanner(reader)
+			for scanner.Scan() {
+				if !noColor {
+					ct.ChangeColor(color, true, ct.None, false)
 				}
+				fmt.Printf("%-[2]*[1]s | ", name, spaceLength)
+				if !noColor {
+					ct.ResetColor()
+				}
+				fmt.Printf("%s\n", scanner.Text())
+			}
 
-				if err := scanner.Err(); err != nil {
-					fmt.Fprintln(os.Stderr, "There was an error with the scanner in container", name, "with error:", err)
-				}
-			}(r, serviceNameFromContainer(container.Names[0], projectName), chooseColor(colorCounter))
-			colorCounter++
-		}
+			if err := scanner.Err(); err != nil {
+				fmt.Fprintln(os.Stderr, "There was an error with the scanner in container", name, "with error:", err)
+			}
+		}(r, serviceName, chooseColor(colorCounter))
+		colorCounter++
 	}
 
 	wg.Wait()
+}
+
+// CmdStart defines the start command
+func CmdStart(config Containers, client *docker.Client, projectName string) {
+
+	conts := getServiceContainers(client, projectName, true)
+
+	for serviceName, container := range conts {
+		confC := findConfig(config, serviceName)
+		fmt.Printf("Starting %s...\n", container.Names[0][1:len(container.Names[0])])
+		client.StartContainer(container.ID, &docker.HostConfig{
+			//Binds: confC.??,
+			CapAdd:  confC.CapAdd,
+			CapDrop: confC.CapDrop,
+			//ContainerIDFile: ??,
+			//LxcConf: ??,
+			//Privileged: ??,
+			//PortBindings: ??,
+			Links: confC.Links,
+			//PublishAllPorts: ??,
+			DNS:       confC.DNS,
+			DNSSearch: confC.DNSSearch,
+			//ExtraHosts: confC.ExternalLinks??,
+			VolumesFrom: confC.VolumesFrom,
+			//NetworkMode: ??,
+			//IpcMode: ??,
+			PidMode: confC.PID,
+			//RestartPolicy: ??,
+			//Devices: ??,
+			//LogConfig: ??,
+			//ReadonlyRootfs: ??,
+			//SecurityOpt: ??,
+			//CgroupParent: ??,
+		})
+	}
 }
