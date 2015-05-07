@@ -123,9 +123,15 @@ Commands:
 		{
 			Name:  "logs",
 			Usage: "View output from containers",
+			Flags: []cli.Flag{
+				cli.BoolFlag{
+					Name:  "no-color",
+					Usage: "Produce monochrome output",
+				},
+			},
 			Action: func(c *cli.Context) {
 				config, client, projectName, _ := before(c)
-				CmdLogs(config, client, projectName)
+				CmdLogs(config, client, projectName, c.Bool("no-color"))
 			},
 		},
 		{

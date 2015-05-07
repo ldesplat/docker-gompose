@@ -1,12 +1,16 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"strings"
+	"sync"
 	"text/tabwriter"
 
+	"github.com/daviddengcn/go-colortext"
 	"github.com/fsouza/go-dockerclient"
 )
 
@@ -46,6 +50,14 @@ var signalMap = map[string]docker.Signal{
 	"SIGWINCH":  docker.SIGWINCH,
 	"SIGXCPU":   docker.SIGXCPU,
 	"SIGXFSZ":   docker.SIGXFSZ,
+}
+
+func chooseColor(index int) ct.Color {
+	return ct.Color(index % 8)
+}
+
+func serviceNameFromContainer(cName string, pName string) string {
+	return cName[len(pName)+2 : len(cName)]
 }
 
 // CmdPs defines the ps command
@@ -136,17 +148,54 @@ func CmdKill(config Containers, client *docker.Client, projectName string, signa
 	}
 }
 
-// CmdLogs defines the kill command
-func CmdLogs(config Containers, client *docker.Client, projectName string) {
+// CmdLogs defines the log command
+func CmdLogs(config Containers, client *docker.Client, projectName string, noColor bool) {
 
 	conts, err := client.ListContainers(docker.ListContainersOptions{All: true})
 	if err != nil {
 		log.Fatalf("%v", err)
 	}
 
+	var wg sync.WaitGroup
+
+	counter := 0
+	spaceLength := 0
 	for _, container := range conts {
 		if stringStartsInSlice("/"+projectName+"_", container.Names) {
-			client.Logs(docker.LogsOptions{Container: container.ID, OutputStream: os.Stdout, ErrorStream: os.Stderr, Follow: true, Stdout: true, Stderr: true})
+			counter++
+			var l = len(serviceNameFromContainer(container.Names[0], projectName))
+			if spaceLength < l {
+				spaceLength = l
+			}
 		}
 	}
+
+	wg.Add(counter)
+	colorCounter := 1
+	for _, container := range conts {
+		if stringStartsInSlice("/"+projectName+"_", container.Names) {
+			r, w := io.Pipe()
+			go client.Logs(docker.LogsOptions{Container: container.ID, OutputStream: w, ErrorStream: w, Follow: true, Stdout: true, Stderr: true})
+			go func(reader io.Reader, name string, color ct.Color) {
+				scanner := bufio.NewScanner(reader)
+				for scanner.Scan() {
+					if !noColor {
+						ct.ChangeColor(color, true, ct.None, false)
+					}
+					fmt.Printf("%-[2]*[1]s | ", name, spaceLength)
+					if !noColor {
+						ct.ResetColor()
+					}
+					fmt.Printf("%s\n", scanner.Text())
+				}
+
+				if err := scanner.Err(); err != nil {
+					fmt.Fprintln(os.Stderr, "There was an error with the scanner in container", name, "with error:", err)
+				}
+			}(r, serviceNameFromContainer(container.Names[0], projectName), chooseColor(colorCounter))
+			colorCounter++
+		}
+	}
+
+	wg.Wait()
 }
