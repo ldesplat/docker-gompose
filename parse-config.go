@@ -7,6 +7,28 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
+// SingleOrMulti refers to a parameter that can include either a string or an array of strings
+type SingleOrMulti struct {
+	Values []string
+}
+
+func (sm *SingleOrMulti) UnmarshalYAML(unmarshal func(interface{}) error) error {
+	var multi []string
+	err := unmarshal(&multi)
+	if err != nil {
+		var single string
+		err := unmarshal(&single)
+		if err != nil {
+			return err
+		}
+		sm.Values = make([]string, 1)
+		sm.Values[0] = single
+	} else {
+		sm.Values = multi
+	}
+	return nil
+}
+
 // ExtendConfig refers to a file and service that we must parse as well
 type ExtendConfig struct {
 	File    string
@@ -25,15 +47,15 @@ type Container struct {
 	Volumes       []string
 	VolumesFrom   []string `yaml:"volumes_from"`
 	Environment   []string
-	EnvFile       []string `yaml:"env_file"`
+	EnvFile       SingleOrMulti `yaml:"env_file"`
 	Extends       ExtendConfig
 	Net           string
 	PID           string
-	DNS           []string
-	CapAdd        []string `yaml:"cap_add"`
-	CapDrop       []string `yaml:"cap_drop"`
-	DNSSearch     []string `yaml:"dns_search"`
-	WorkingDir    string   `yaml:"working_dir"`
+	DNS           SingleOrMulti
+	CapAdd        []string      `yaml:"cap_add"`
+	CapDrop       []string      `yaml:"cap_drop"`
+	DNSSearch     SingleOrMulti `yaml:"dns_search"`
+	WorkingDir    string        `yaml:"working_dir"`
 	Entrypoint    string
 	User          string
 	Hostname      string

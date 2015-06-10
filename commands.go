@@ -57,11 +57,11 @@ func chooseColor(index int) ct.Color {
 }
 
 func serviceNameFromContainer(cName string, pName string) string {
-	return cName[len(pName)+2 : len(cName)]
+	return cName[len(pName)+2:]
 }
 
 func findConfig(config Containers, name string) Container {
-	return config[name[strings.LastIndex(name, "_"):len(name)]]
+	return config[name[strings.LastIndex(name, "_"):]]
 }
 
 func getServiceContainers(client *docker.Client, projectName string, allContainers bool) map[string]docker.APIContainers {
@@ -217,8 +217,8 @@ func CmdStart(config Containers, client *docker.Client, projectName string) {
 			//PortBindings: ??,
 			Links: confC.Links,
 			//PublishAllPorts: ??,
-			DNS:       confC.DNS,
-			DNSSearch: confC.DNSSearch,
+			DNS:       confC.DNS.Values,
+			DNSSearch: confC.DNSSearch.Values,
 			//ExtraHosts: confC.ExternalLinks??,
 			VolumesFrom: confC.VolumesFrom,
 			//NetworkMode: ??,
